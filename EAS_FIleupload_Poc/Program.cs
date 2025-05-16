@@ -156,13 +156,13 @@ public class HashingService
             sha1.TransformBlock(buffer, 0, bytesRead, null, 0);
             md5.TransformBlock(buffer, 0, bytesRead, null, 0);
         }
-        sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-        sha1.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-        md5.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+        sha256.TransformFinalBlock([], 0, 0);
+        sha1.TransformFinalBlock([], 0, 0);
+        md5.TransformFinalBlock([], 0, 0);
         return (
-            FileStorageService.ConvertToHexStringLower(sha256.Hash),
-            FileStorageService.ConvertToHexStringLower(sha1.Hash),
-            FileStorageService.ConvertToHexStringLower(md5.Hash)
+            FileStorageService.ConvertToHexStringLower(sha256.Hash!),
+            FileStorageService.ConvertToHexStringLower(sha1.Hash!),
+            FileStorageService.ConvertToHexStringLower(md5.Hash!)
         );
     }
 }
@@ -215,8 +215,8 @@ public class FileStorageService
             totalBytes += bytesRead;
         }
 
-        sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-        var hash = ConvertToHexStringLower(sha256.Hash);
+        sha256.TransformFinalBlock([], 0, 0);
+        var hash = ConvertToHexStringLower(sha256.Hash!);
 
         var closeCmd = new NpgsqlCommand("SELECT lo_close(@fd)", conn, (NpgsqlTransaction)tx);
         closeCmd.Parameters.AddWithValue("fd", NpgsqlDbType.Integer, fd);
@@ -265,12 +265,12 @@ public class FileStorageService
         openCmd.Parameters.AddWithValue("oid", NpgsqlDbType.Oid, file.LargeObjectOid);
         var fd = (int)(await openCmd.ExecuteScalarAsync(cancellationToken))!;
 
-        var buffer = new byte[81920];
+        const int bufferLength = 81920;
         while (true)
         {
             var readCmd = new NpgsqlCommand("SELECT loread(@fd, @len)", conn, (NpgsqlTransaction)tx);
             readCmd.Parameters.AddWithValue("fd", NpgsqlDbType.Integer, fd);
-            readCmd.Parameters.AddWithValue("len", NpgsqlDbType.Integer, buffer.Length);
+            readCmd.Parameters.AddWithValue("len", NpgsqlDbType.Integer, bufferLength);
 
             var result = await readCmd.ExecuteScalarAsync(cancellationToken);
             if (result is not byte[] chunk || chunk.Length == 0)
