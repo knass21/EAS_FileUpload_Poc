@@ -1,85 +1,76 @@
-
 # EAS File Upload PoC
 
-This project demonstrates a file upload and download system using a .NET client and a .NET minimal API server, with PostgreSQL large object storage.
+This repository demonstrates a complete file upload and download system using a .NET minimal API server and a .NET client, with PostgreSQL large object storage for efficient handling of large files. It also provides endpoints for extracting file metadata using external tools.
 
 ---
 
-## Client: EAS_FileUpload_Poc.Client/Program.cs
+## Solution Structure
 
-**Purpose:**  
-Uploads a file to the server, shows upload progress, then downloads the file back, showing download progress.
-
-**Key Steps:**
-1. **Prepare File and HTTP Client:**  
-   - Set file path, server URL, and create an `HttpClient` with a long timeout.
-2. **Upload File:**  
-   - Open the file as a stream.
-   - Wrap the stream in a `ProgressStream` to report upload progress.
-   - POST the file to the server using `StreamContent`.
-   - Display progress, speed, and ETA in the console.
-   - On success, parse the response for the file ID.
-3. **Download File:**  
-   - Use the returned file ID to construct a download URL.
-   - Download the file as a stream, writing to disk.
-   - Show download progress and speed.
-4. **Helpers:**  
-   - `FormatBytes` for human-readable byte sizes.
-   - `ProgressStream` class to monitor upload progress.
-
-**Usage:**  
-Edit the file path and server URL as needed, then run the client. It will upload and then download the file, showing progress in the console.
+- **EAS_FIleupload_Poc/** – Minimal API server for file upload, download, and metadata extraction.
+- **EAS_FileUpload_Poc.Client/** – Console client for uploading and downloading files, with progress reporting.
 
 ---
 
-## Server: EAS_FIleupload_Poc/Program.cs
+## Features
 
-**Purpose:**  
-Implements a minimal API for file upload, download, and metadata extraction, storing files as PostgreSQL large objects.
+### Server (Minimal API)
+- **Upload files** (streamed, with progress and hashing)
+- **Download files** (streamed from PostgreSQL large objects)
+- **Multiple upload endpoints** (raw body, Swagger UI, multi-file)
+- **File metadata extraction**
+  - Video metadata via `ffprobe`
+  - General metadata via `exiftool`
+- **Hash calculation** (SHA256, SHA1, MD5)
+- **Entity Framework Core** for file metadata
+- **Swagger UI** for API exploration (in development mode)
 
-**Key Endpoints:**
-- `POST /upload`  
-  Upload a file via raw body (query params: `fileName`, `contentType`).
-- `POST /upload-swagger`  
-  Upload a file via Swagger UI/form-data.
-- `POST /upload-multi-swagger`  
-  Upload multiple files via Swagger UI/form-data.
-- `GET /files/{id}`  
-  Download a file by GUID.
-- `GET /files/{id}/hashes`  
-  Get SHA256/SHA1/MD5 hashes for a file.
-- `GET /files/{id}/metadata/ffprobe`  
-  Extract video metadata using ffprobe.
-- `GET /files/{id}/metadata/Exif`  
-  Extract metadata using exiftool.
-
-**Key Components:**
-- **FileDbContext:**  
-  Entity Framework context for file metadata.
-- **FileStorageService:**  
-  Handles upload (with streaming and hashing), download (streaming from PostgreSQL large objects), and metadata retrieval.
-- **HashingService:**  
-  Computes SHA256, SHA1, and MD5 hashes.
-- **FFProbeMetadataService & ExifMetadataService:**  
-  Extracts metadata from files using external tools.
-- **LargeObjectDbStream:**  
-  Custom stream for reading PostgreSQL large objects.
-
-**Setup:**
-- Configure PostgreSQL connection string in `appsettings.json`.
-- Ensure `ffprobe` and `exiftool` are available on the server.
-- Run the server; Swagger UI is available in development mode.
+### Client (Console App)
+- **Upload a file** to the server with progress, speed, and ETA
+- **Download the file** back, showing download progress
+- **Helpers** for formatting byte sizes and monitoring stream progress
 
 ---
 
-## How it works
+## Quick Start
 
-1. **Upload:**  
-   The client streams the file to the server. The server stores the file as a PostgreSQL large object, computes its hash, and saves metadata.
-2. **Download:**  
-   The client requests the file by ID. The server streams the file from PostgreSQL back to the client.
-3. **Metadata:**  
-   The server can extract and return metadata using ffprobe or exiftool.
+### Prerequisites
+- .NET 7 or newer
+- PostgreSQL (with large object support enabled)
+- `ffprobe` and `exiftool` available on the server (for metadata endpoints)
+
+### Setup
+1. **Configure PostgreSQL**
+   - Set the connection string in `EAS_FIleupload_Poc/appsettings.json`.
+2. **Ensure external tools**
+   - Make sure `ffprobe` and `exiftool` are installed and accessible on the server.
+3. **Run the server**
+   - Start the API project. Swagger UI will be available in development mode.
+4. **Configure and run the client**
+   - Edit the file path and server URL in `EAS_FileUpload_Poc.Client/Program.cs` as needed.
+   - Run the client to upload and download a file, with progress displayed in the console.
+
+---
+
+## API Overview
+
+- `POST /upload` – Upload a file via raw body (query: `fileName`, `contentType`)
+- `POST /upload-swagger` – Upload via Swagger UI/form-data
+- `POST /upload-multi-swagger` – Upload multiple files via Swagger UI/form-data
+- `GET /files/{id}` – Download a file by GUID
+- `GET /files/{id}/hashes` – Get SHA256/SHA1/MD5 hashes
+- `GET /files/{id}/metadata/ffprobe` – Extract video metadata
+- `GET /files/{id}/metadata/Exif` – Extract general metadata
+
+---
+
+## How It Works
+
+1. **Upload:**
+   - The client streams a file to the server. The server stores it as a PostgreSQL large object, computes hashes, and saves metadata.
+2. **Download:**
+   - The client requests the file by ID. The server streams it back from PostgreSQL.
+3. **Metadata:**
+   - The server can extract and return metadata using `ffprobe` or `exiftool`.
 
 ---
 
@@ -90,3 +81,7 @@ Implements a minimal API for file upload, download, and metadata extraction, sto
 - ffprobe and exiftool (for metadata endpoints)
 
 ---
+
+## Notes
+- For development, Swagger UI is enabled for easy API testing.
+- The solution is designed for efficient handling of large files and extensible metadata extraction.
