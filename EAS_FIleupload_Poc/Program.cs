@@ -175,6 +175,7 @@ public class FileStorageService
 
         sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
         var hash = Convert.ToHexStringLower(sha256.Hash);
+        _logger.LogInformation("SHA256 hash for uploaded file {FileName}: {Hash}", fileName, hash);
 
         var closeCmd = new NpgsqlCommand("SELECT lo_close(@fd)", conn, (NpgsqlTransaction)tx);
         closeCmd.Parameters.AddWithValue("fd", NpgsqlDbType.Integer, fd);
@@ -269,6 +270,7 @@ public class FileStorageService
 
         sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
         var computed = Convert.ToHexStringLower(sha256.Hash!);
+        _logger.LogInformation("SHA256 hash for downloaded file {FileName}: {Hash}", file.FileName, computed);
 
         if (computed != file.Sha256Hash)
             _logger.LogWarning("Hash mismatch for file {FileName}: expected {Expected}, computed {Computed}", file.FileName, file.Sha256Hash, computed);
