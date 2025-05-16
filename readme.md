@@ -53,7 +53,7 @@ This repository demonstrates a complete file upload and download system using a 
 
 ## API Overview
 
-- `POST /upload` – Upload a file via raw body (query: `fileName`, `contentType`)
+- `POST /upload` – Upload a file via raw body (query: `fileName`, `contentType`), this can handle larger files (multiple gigabytes)
 - `POST /upload-swagger` – Upload via Swagger UI/form-data
 - `POST /upload-multi-swagger` – Upload multiple files via Swagger UI/form-data
 - `GET /files/{id}` – Download a file by GUID
