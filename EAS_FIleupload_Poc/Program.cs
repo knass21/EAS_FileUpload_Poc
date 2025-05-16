@@ -65,7 +65,7 @@ app.MapPost("/upload-swagger",
     .DisableAntiforgery();
 
 // Download (streaming, headers first)
-app.MapGet("/download/{id:guid}",
+app.MapGet("/files/{id:guid}",
         async ([FromServices] FileStorageService fileService,
             Guid id,
             HttpResponse response,
@@ -330,44 +330,7 @@ public class FileStorageService
     }
 
     // Streaming download: write directly to output stream (e.g. response.Body)
-    public async Task DownloadToStreamAsync(
-        Guid fileId, Stream output, Action<byte[], int>? onChunk = null, CancellationToken cancellationToken = default)
-    {
-        var file = await _db.Files.FindAsync([fileId], cancellationToken);
-        if (file == null) return;
 
-        var connStr = _config.GetConnectionString("DefaultConnection")!;
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync(cancellationToken);
-        await using var tx = await conn.BeginTransactionAsync(cancellationToken);
-
-        var openCmd = new NpgsqlCommand("SELECT lo_open(@oid, 262144)", conn, (NpgsqlTransaction)tx);
-        openCmd.Parameters.AddWithValue("oid", NpgsqlDbType.Oid, file.LargeObjectOid);
-        var fd = (int)(await openCmd.ExecuteScalarAsync(cancellationToken))!;
-
-        const int bufferLength = 81920;
-        while (true)
-        {
-            var readCmd = new NpgsqlCommand("SELECT loread(@fd, @len)", conn, (NpgsqlTransaction)tx);
-            readCmd.Parameters.AddWithValue("fd", NpgsqlDbType.Integer, fd);
-            readCmd.Parameters.AddWithValue("len", NpgsqlDbType.Integer, bufferLength);
-
-            var result = await readCmd.ExecuteScalarAsync(cancellationToken);
-            if (result is not byte[] chunk || chunk.Length == 0)
-                break;
-
-            await output.WriteAsync(chunk, 0, chunk.Length, cancellationToken);
-            onChunk?.Invoke(chunk, chunk.Length);
-        }
-
-        var closeCmd = new NpgsqlCommand("SELECT lo_close(@fd)", conn, (NpgsqlTransaction)tx);
-        closeCmd.Parameters.AddWithValue("fd", NpgsqlDbType.Integer, fd);
-        await closeCmd.ExecuteNonQueryAsync(cancellationToken);
-
-        await tx.CommitAsync(cancellationToken);
-        await output.FlushAsync(cancellationToken);
-    }
-    
     public async Task<Stream?> OpenFileStreamAsync(Guid fileId, CancellationToken cancellationToken)
     {
         var file = await _db.Files.FindAsync([fileId], cancellationToken);
@@ -452,6 +415,22 @@ public class LargeObjectDbStream : Stream
             _disposed = true;
         }
         base.Dispose(disposing);
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        if (!_disposed)
+        {
+            var closeCmd = new NpgsqlCommand("SELECT lo_close(@fd)", _conn, _tx);
+            closeCmd.Parameters.AddWithValue("fd", NpgsqlDbType.Integer, _fd);
+            await closeCmd.ExecuteNonQueryAsync();
+            await _tx.CommitAsync();
+            await _conn.DisposeAsync();
+            _disposed = true;
+        }
+
+        GC.SuppressFinalize(this);
+        await base.DisposeAsync();
     }
 
     public override void Flush() { }

@@ -13,7 +13,7 @@ var fileName = "video.mp4";
 var directory = "directoryPath";
 var filePath = Path.Combine(directory, fileName);
 var host = "http://localhost:5044";
-var uploadUrl = $"{host}/upload?fileName={fileName}&contentType=video/mp4";
+var uploadUrl = $"{host}/files?fileName={fileName}&contentType=video/mp4";
 
 using var httpClient = new HttpClient
 {
@@ -62,6 +62,8 @@ Console.WriteLine($"Completed in {stopwatch.Elapsed.TotalSeconds:F2} seconds.");
 
 
 string downloadUrl = $"{host}/download/{result.Id}"; // Replace {FILE_ID} with actual GUID
+var fileId = result.Id;
+string downloadUrl = $"{host}/files/{fileId}"; // Replace {FILE_ID} with actual GUID
 string outputPath = Path.Combine(directory,$"Copy_{fileName}");
 
 
