@@ -60,9 +60,8 @@ Console.WriteLine($"Upload successful:");
 Console.WriteLine(result);
 Console.WriteLine($"Completed in {stopwatch.Elapsed.TotalSeconds:F2} seconds.");
 
-
-string downloadUrl = $"{host}/download/{result.Id}"; // Replace {FILE_ID} with actual GUID
 var fileId = result.Id;
+// var fileId = "e79c5605-5308-4996-8f9e-45462ca2adf7";
 string downloadUrl = $"{host}/files/{fileId}"; // Replace {FILE_ID} with actual GUID
 string outputPath = Path.Combine(directory,$"Copy_{fileName}");
 
