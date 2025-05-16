@@ -17,7 +17,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c => { c.SwaggerDoc("v1", new OpenApiInfo { Title = "File API", Version = "v1" }); });
 builder.Services.AddScoped<FileStorageService>();
 builder.Services.AddScoped<HashingService>();
-builder.Services.AddScoped<VideoMetadataService>();
+builder.Services.AddScoped<FFProbeMetadataService>();
+builder.Services.AddScoped<ExifMetadataService>();
 builder.Services.AddLogging();
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
@@ -122,9 +123,9 @@ app.MapGet("/files/{id:guid}/hashes",
     .WithName("GetFileHashes")
     .DisableAntiforgery();
 
-app.MapGet("/files/{id:guid}/metadata",
+app.MapGet("/files/{id:guid}/metadata/ffprobe",
         async ([FromServices] FileStorageService fileService,
-            [FromServices] VideoMetadataService metadataService,
+            [FromServices] FFProbeMetadataService metadataService,
             Guid id,
             CancellationToken token) =>
         {
@@ -152,6 +153,38 @@ app.MapGet("/files/{id:guid}/metadata",
             }
         })
     .WithName("GetVideoMetadata")
+    .DisableAntiforgery();
+
+app.MapGet("/files/{id:guid}/metadata/Exif",
+        async ([FromServices] FileStorageService fileService,
+            [FromServices] ExifMetadataService metadataService,
+            Guid id,
+            CancellationToken token) =>
+        {
+            var fileRecord = await fileService.GetFileMetadataAsync(id, token);
+            if (fileRecord == null)
+                return Results.NotFound("File not found");
+
+            // Use extension from filename if possible, fallback to ".bin"
+            string extension = Path.GetExtension(fileRecord.FileName);
+            if (string.IsNullOrWhiteSpace(extension))
+                extension = ".bin";
+
+            await using var stream = await fileService.OpenFileStreamAsync(id, token);
+            if (stream == null)
+                return Results.NotFound("File not found");
+
+            try
+            {
+                string metadataJson = await metadataService.ExtractMetadataAsync(stream, extension, token);
+                return Results.Ok(System.Text.Json.JsonDocument.Parse(metadataJson));
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem($"Metadata extraction failed: {ex.Message}");
+            }
+        })
+    .WithName("GetVideoMetadata Exif")
     .DisableAntiforgery();
 
 
@@ -218,15 +251,49 @@ public class HashingService
     }
 }
 
-public class VideoMetadataService
+public class ExifMetadataService
 {
-    private readonly IWebHostEnvironment _env;
-
-    public VideoMetadataService(IWebHostEnvironment env)
+    public async Task<string> ExtractMetadataAsync(Stream videoStream, string fileExtension,
+        CancellationToken cancellationToken)
     {
-        _env = env;
-    }
+        // Save to temp file (because ffprobe doesn't support stdin easily for most formats)
+        var tempFile = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + fileExtension);
+        await using (var fs = File.Create(tempFile))
+        {
+            await videoStream.CopyToAsync(fs, cancellationToken);
+        }
 
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "executeables/exiftool-13.06_64/exiftool.exe",
+                Arguments = $"-json -g1 \"{tempFile}\"", // Use JSON output for better parsing
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = System.Diagnostics.Process.Start(psi)!;
+            string output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+            string error = await process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken);
+
+            if (process.ExitCode != 0)
+                throw new Exception($"exiftool failed: {error}");
+
+            return output; // Return raw JSON. You can also parse and map to a DTO if needed!
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+}
+
+public class FFProbeMetadataService
+{
     public async Task<string> ExtractMetadataAsync(Stream videoStream, string fileExtension,
         CancellationToken cancellationToken)
     {
@@ -255,7 +322,7 @@ public class VideoMetadataService
             await process.WaitForExitAsync(cancellationToken);
 
             if (process.ExitCode != 0)
-                throw new Exception($"ffprobe failed: {output} - {error}");
+                throw new Exception($"ffprobe failed: {error}");
 
             return output; // Return raw JSON. You can also parse and map to a DTO if needed!
         }
