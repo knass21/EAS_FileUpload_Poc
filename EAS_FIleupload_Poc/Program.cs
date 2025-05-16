@@ -23,6 +23,7 @@ builder.Services.AddSwaggerGen(c =>
 });
 builder.Services.AddScoped<FileStorageService>();
 builder.Services.AddScoped<HashingService>();
+builder.Services.AddScoped<VideoMetadataService>();
 builder.Services.AddLogging();
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
@@ -91,7 +92,7 @@ app.MapGet("/download/{id:guid}",
 .DisableAntiforgery();
 
 
-app.MapGet("/filehashes/{id:guid}",
+app.MapGet("/files/{id:guid}/hashes",
         async ([FromServices] FileStorageService fileService,
             [FromServices] HashingService hashingService,
             Guid id,
@@ -105,6 +106,38 @@ app.MapGet("/filehashes/{id:guid}",
         return Results.Ok(new FileHashesResponse(sha256, sha1, md5));
     })
     .WithName("GetFileHashes")
+    .DisableAntiforgery();
+
+app.MapGet("/files/{id:guid}/metadata",
+        async ([FromServices] FileStorageService fileService,
+            [FromServices] VideoMetadataService metadataService,
+            Guid id,
+            CancellationToken token) =>
+        {
+            var fileRecord = await fileService.GetFileMetadataAsync(id, token);
+            if (fileRecord == null)
+                return Results.NotFound("File not found");
+
+            // Use extension from filename if possible, fallback to ".bin"
+            string extension = Path.GetExtension(fileRecord.FileName);
+            if (string.IsNullOrWhiteSpace(extension)) 
+                extension = ".bin";
+
+            await using var stream = await fileService.OpenFileStreamAsync(id, token);
+            if (stream == null)
+                return Results.NotFound("File not found");
+
+            try
+            {
+                string metadataJson = await metadataService.ExtractMetadataAsync(stream, extension, token);
+                return Results.Ok(System.Text.Json.JsonDocument.Parse(metadataJson));
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem($"Metadata extraction failed: {ex.Message}");
+            }
+        })
+    .WithName("GetVideoMetadata")
     .DisableAntiforgery();
 
 
@@ -166,6 +199,53 @@ public class HashingService
         );
     }
 }
+
+public class VideoMetadataService
+{
+    private readonly IWebHostEnvironment _env;
+    public VideoMetadataService(IWebHostEnvironment env)
+    {
+        _env = env;
+    }
+
+    public async Task<string> ExtractMetadataAsync(Stream videoStream, string fileExtension, CancellationToken cancellationToken)
+    {
+        // Save to temp file (because ffprobe doesn't support stdin easily for most formats)
+        var tempFile = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + fileExtension);
+        await using (var fs = File.Create(tempFile))
+        {
+            await videoStream.CopyToAsync(fs, cancellationToken);
+        }
+
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "ffprobe",
+                Arguments = $"-v quiet -print_format json -show_format -show_streams \"{tempFile}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = System.Diagnostics.Process.Start(psi)!;
+            string output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+            string error = await process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken);
+
+            if (process.ExitCode != 0)
+                throw new Exception($"ffprobe failed: {error}");
+
+            return output; // Return raw JSON. You can also parse and map to a DTO if needed!
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+}
+
 
 
 public class FileStorageService
