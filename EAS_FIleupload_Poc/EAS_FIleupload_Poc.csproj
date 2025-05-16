@@ -13,5 +13,7 @@
         <PackageReference Include="Npgsql.DependencyInjection" Version="9.0.3" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4"/>
     </ItemGroup>
-
+    <ItemGroup>
+        <None Update="executeables\**\*" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
 </Project>
