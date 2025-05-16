@@ -1,0 +1,34 @@
+﻿<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Multi-Launch: EAS_FIleupload_Poc" type="com.intellij.execution.configurations.multilaunch" factoryName="MultiLaunchConfiguration">
+    <rows>
+      <ExecutableRowSnapshot>
+        <option name="condition">
+          <ConditionSnapshot>
+            <option name="type" value="immediately" />
+          </ConditionSnapshot>
+        </option>
+        <option name="executable">
+          <ExecutableSnapshot>
+            <option name="id" value="runConfig:.NET Launch Settings Profile.EAS_FIleupload_Poc: http" />
+          </ExecutableSnapshot>
+        </option>
+      </ExecutableRowSnapshot>
+      <ExecutableRowSnapshot>
+        <option name="condition">
+          <ConditionSnapshot>
+            <attributes>
+              <entry key="port" value="5044" />
+            </attributes>
+            <option name="type" value="waitPortOpened" />
+          </ConditionSnapshot>
+        </option>
+        <option name="executable">
+          <ExecutableSnapshot>
+            <option name="id" value="runConfig:.NET Project.EAS_FileUpload_Poc.Client" />
+          </ExecutableSnapshot>
+        </option>
+      </ExecutableRowSnapshot>
+    </rows>
+    <method v="2" />
+  </configuration>
+</component>
