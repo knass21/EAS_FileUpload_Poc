@@ -11,34 +11,23 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<FileDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// builder.Services.Configure<FormOptions>(o =>
-// {
-//     o.MultipartBodyLengthLimit = long.MaxValue;
-// });
-
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.MaxRequestBodySize = null;
 });
 
-// Add services to the container.
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "File API", Version = "v1" });
-    // c.MapType<IFormFile>(() => new OpenApiSchema { Type = "string", Format = "binary" });
 });
-// builder.Services.AddOpenApi();
-// builder.Services.Configure<Microsoft.AspNetCore.Antiforgery.AntiforgeryOptions>(options => options.SuppressXFrameOptionsHeader = true);
 builder.Services.AddScoped<FileStorageService>();
 builder.Services.AddLogging();
-
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// Enable Swagger middleware
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -48,43 +37,54 @@ if (app.Environment.IsDevelopment())
     });
 }
 app.UseHttpsRedirection();
-
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Production: streamed file upload (recommended for large files)
+// Upload endpoint
 app.MapPost("/upload", async (HttpRequest request, [FromServices] FileStorageService fileService,
-        [FromQuery] string fileName, [FromQuery] string contentType, CancellationToken token) =>
+    [FromQuery] string fileName, [FromQuery] string contentType, CancellationToken token) =>
 {
-    return await fileService.UploadAsync(request.Body, fileName, contentType, token);
+    var result = await fileService.UploadAsync(request.Body, fileName, contentType, token);
+    return Results.Ok(result);
 })
 .WithName("UploadFile")
 .DisableAntiforgery();
 
-// Swagger/demo: file upload with IFormFile (limited file size)
+// Upload with Swagger
 app.MapPost("/upload-swagger",
-        async ([FromServices] FileStorageService fileService,
-            IFormFile file, CancellationToken token) =>
-        {
-            await using var stream = file.OpenReadStream();
-            return await fileService.UploadAsync(stream, file.FileName, file.ContentType, token);
-        })
-    // .Accepts<IFormFile>("multipart/form-data")
+    async ([FromServices] FileStorageService fileService,
+        IFormFile file, CancellationToken token) =>
+    {
+        await using var stream = file.OpenReadStream();
+        var result = await fileService.UploadAsync(stream, file.FileName, file.ContentType, token);
+        return Results.Ok(result);
+    })
     .WithName("UploadFileSwagger")
     .DisableAntiforgery();
 
+// Download (streaming, headers first)
 app.MapGet("/download/{id:guid}", async ([FromServices] FileStorageService fileService, Guid id, HttpResponse response, CancellationToken token) =>
-    {
-        return await fileService.DownloadAsync(id, response, token);
-    })
-    .WithName("DownloadFile")
-    .DisableAntiforgery();
+{
+    var fileRecord = await fileService.GetFileMetadataAsync(id, token);
+    if (fileRecord == null)
+        return Results.NotFound("File not found");
 
+    response.ContentType = fileRecord.ContentType;
+    response.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment")
+    {
+        FileNameStar = fileRecord.FileName
+    }.ToString();
+
+    await fileService.DownloadToStreamAsync(id, response.Body, null, token);
+
+    return Results.Empty;
+})
+.WithName("DownloadFile")
+.DisableAntiforgery();
 
 using (var scope = app.Services.CreateScope())
 {
     var fileDbContext = scope.ServiceProvider.GetRequiredService<FileDbContext>();
-    // fileDbContext.Database.EnsureDeleted();
     fileDbContext.Database.EnsureCreated();
 }
 
@@ -127,7 +127,8 @@ public class FileStorageService
         _logger = logger;
     }
 
-    public async Task<IResult> UploadAsync(Stream inputStream, string fileName, string contentType, CancellationToken cancellationToken)
+    public async Task<FileUploadResponse> UploadAsync(
+        Stream inputStream, string fileName, string contentType, CancellationToken cancellationToken)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         _logger.LogInformation("Starting upload of file: {FileName}", fileName);
@@ -149,8 +150,6 @@ public class FileStorageService
         long totalBytes = 0;
         using var sha256 = SHA256.Create();
 
-        var lastLogTime = DateTime.UtcNow;
-        var lastLoggedBytes = 0L;
         while ((bytesRead = await inputStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)) > 0)
         {
             var writeCmd = new NpgsqlCommand("SELECT lowrite(@fd, @data)", conn, (NpgsqlTransaction)tx);
@@ -160,22 +159,10 @@ public class FileStorageService
 
             sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
             totalBytes += bytesRead;
-            var now = DateTime.UtcNow;
-            if ((now - lastLogTime).TotalSeconds >= 1)
-            {
-                var seconds = (now - lastLogTime).TotalSeconds;
-                var speed = (totalBytes - lastLoggedBytes) / seconds; // bytes/sec
-                var remainingBytes = totalBytes - lastLoggedBytes;
-                var eta = TimeSpan.FromSeconds(remainingBytes / speed);
-                _logger.LogInformation("Uploaded {UploadedBytes} bytes so far for file {FileName} | Speed: {Speed}/s", totalBytes, fileName, FormatBytes(speed));
-                lastLoggedBytes = totalBytes;
-                lastLogTime = now;
-            }
         }
 
         sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-        var hash = Convert.ToHexStringLower(sha256.Hash);
-        _logger.LogInformation("SHA256 hash for uploaded file {FileName}: {Hash}", fileName, hash);
+        var hash = ConvertToHexStringLower(sha256.Hash);
 
         var closeCmd = new NpgsqlCommand("SELECT lo_close(@fd)", conn, (NpgsqlTransaction)tx);
         closeCmd.Parameters.AddWithValue("fd", NpgsqlDbType.Integer, fd);
@@ -199,27 +186,21 @@ public class FileStorageService
         stopwatch.Stop();
         _logger.LogInformation("Finished upload of file {FileName} ({FileSize} bytes) in {ElapsedMs} ms", fileName, totalBytes, stopwatch.ElapsedMilliseconds);
 
-        return Results.Ok(new FileUploadResponse(record.Id, record.Sha256Hash, record.FileSize));
+        return new FileUploadResponse(record.Id, record.Sha256Hash, record.FileSize);
     }
 
-    static string FormatBytes(double bytes)
+    // Get metadata only (for headers)
+    public async Task<FileRecord?> GetFileMetadataAsync(Guid fileId, CancellationToken cancellationToken)
     {
-        string[] sizes = { "B", "KB", "MB", "GB" };
-        int order = 0;
-        while (bytes >= 1024 && order < sizes.Length - 1)
-        {
-            order++;
-            bytes /= 1024;
-        }
-        return $"{bytes:0.##} {sizes[order]}";
+        return await _db.Files.FindAsync([fileId], cancellationToken);
     }
-    
-    public async Task<IResult> DownloadAsync(Guid fileId, HttpResponse response, CancellationToken cancellationToken)
-    {
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+    // Streaming download: write directly to output stream (e.g. response.Body)
+    public async Task DownloadToStreamAsync(
+        Guid fileId, Stream output, Action<byte[], int>? onChunk = null, CancellationToken cancellationToken = default)
+    {
         var file = await _db.Files.FindAsync([fileId], cancellationToken);
-        if (file == null) return Results.NotFound("File not found");
+        if (file == null) return;
 
         var connStr = _config.GetConnectionString("DefaultConnection")!;
         await using var conn = new NpgsqlConnection(connStr);
@@ -231,17 +212,6 @@ public class FileStorageService
         var fd = (int)(await openCmd.ExecuteScalarAsync(cancellationToken))!;
 
         var buffer = new byte[81920];
-        using var sha256 = SHA256.Create();
-
-        response.ContentType = file.ContentType;
-        response.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment")
-        {
-            FileNameStar = file.FileName
-        }.ToString();
-
-        var totalBytes = 0L;
-        var lastLogTime = DateTime.UtcNow;
-        var lastLoggedBytes = 0L;
         while (true)
         {
             var readCmd = new NpgsqlCommand("SELECT loread(@fd, @len)", conn, (NpgsqlTransaction)tx);
@@ -252,38 +222,20 @@ public class FileStorageService
             if (result is not byte[] chunk || chunk.Length == 0)
                 break;
 
-            await response.Body.WriteAsync(chunk, cancellationToken);
-            totalBytes += chunk.Length;
-            var now = DateTime.UtcNow;
-            if ((now - lastLogTime).TotalSeconds >= 1)
-            {
-                var seconds = (now - lastLogTime).TotalSeconds;
-                var speed = (totalBytes - lastLoggedBytes) / seconds;
-                var remainingBytes = file.FileSize - totalBytes;
-                var eta = TimeSpan.FromSeconds(remainingBytes / speed);
-                _logger.LogInformation(@"Downloaded {DownloadedBytes} bytes of {TotalBytes} for file {FileName} | Speed: {Speed}/s | ETA: {Eta:mm\:ss}", totalBytes, file.FileSize, file.FileName, FormatBytes(speed), eta);
-                lastLoggedBytes = totalBytes;
-                lastLogTime = now;
-            }
-            sha256.TransformBlock(chunk, 0, chunk.Length, null, 0);
+            await output.WriteAsync(chunk, 0, chunk.Length, cancellationToken);
+            onChunk?.Invoke(chunk, chunk.Length);
         }
-
-        sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-        var computed = Convert.ToHexStringLower(sha256.Hash!);
-        _logger.LogInformation("SHA256 hash for downloaded file {FileName}: {Hash}", file.FileName, computed);
-
-        if (computed != file.Sha256Hash)
-            _logger.LogWarning("Hash mismatch for file {FileName}: expected {Expected}, computed {Computed}", file.FileName, file.Sha256Hash, computed);
 
         var closeCmd = new NpgsqlCommand("SELECT lo_close(@fd)", conn, (NpgsqlTransaction)tx);
         closeCmd.Parameters.AddWithValue("fd", NpgsqlDbType.Integer, fd);
         await closeCmd.ExecuteNonQueryAsync(cancellationToken);
 
         await tx.CommitAsync(cancellationToken);
+        await output.FlushAsync(cancellationToken);
+    }
 
-        stopwatch.Stop();
-        _logger.LogInformation("Finished download of file {FileName} in {ElapsedMs} ms", file.FileName, stopwatch.ElapsedMilliseconds);
-
-        return TypedResults.Empty;
+    public static string ConvertToHexStringLower(byte[] hash)
+    {
+        return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
     }
 }
