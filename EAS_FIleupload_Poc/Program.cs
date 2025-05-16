@@ -22,6 +22,7 @@ builder.Services.AddScoped<ExifMetadataService>();
 builder.Services.AddLogging();
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
+builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
@@ -31,9 +32,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c => { c.SwaggerEndpoint("/swagger/v1/swagger.json", "File API V1"); });
 }
 
+app.UseStatusCodePages();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseExceptionHandler();
 
 // Upload endpoint
 app.MapPost("/upload", async (HttpRequest request, [FromServices] FileStorageService fileService,
