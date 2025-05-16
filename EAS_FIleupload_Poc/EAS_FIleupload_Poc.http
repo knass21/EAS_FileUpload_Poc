@@ -1,0 +1,6 @@
+@EAS_FIleupload_Poc_HostAddress = http://localhost:5044
+
+GET {{EAS_FIleupload_Poc_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

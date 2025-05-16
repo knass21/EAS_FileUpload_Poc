@@ -1,0 +1,16 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EAS_FIleupload_Poc", "EAS_FIleupload_Poc\EAS_FIleupload_Poc.csproj", "{99E080A2-63F6-4C34-A18A-408E4FD83D12}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{99E080A2-63F6-4C34-A18A-408E4FD83D12}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{99E080A2-63F6-4C34-A18A-408E4FD83D12}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{99E080A2-63F6-4C34-A18A-408E4FD83D12}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{99E080A2-63F6-4C34-A18A-408E4FD83D12}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
