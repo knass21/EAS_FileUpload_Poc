@@ -56,8 +56,9 @@ if (!response.IsSuccessStatusCode)
 }
 
 var result = await response.Content.ReadFromJsonAsync<FileUploadResponse>();
-Console.WriteLine("Upload successful:");
+Console.WriteLine($"Upload successful:");
 Console.WriteLine(result);
+Console.WriteLine($"Completed in {stopwatch.Elapsed.TotalSeconds:F2} seconds.");
 
 
 string downloadUrl = $"{host}/download/{result.Id}"; // Replace {FILE_ID} with actual GUID
