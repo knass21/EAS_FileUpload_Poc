@@ -1,4 +1,4 @@
-﻿namespace EAS_FIleupload_Poc.Data;
+﻿namespace EAS_FIleupload_Poc.DataStorage;
 
 public class FileRecord
 {

@@ -8,6 +8,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using EAS_FileUpload_Poc.Client;
 
 var fileName = "video.mp4";
 var directory = "directoryPath";
@@ -114,17 +115,19 @@ static string FormatBytes(double bytes)
     return $"{bytes:0.##} {sizes[order]}";
 }
 
-public record FileUploadResponse(Guid Id, string Sha256Hash, long FileSize);
-public class ProgressStream : Stream
+namespace EAS_FileUpload_Poc.Client
 {
-    private readonly Stream _inner;
-    private readonly Action<long> _progress;
-
-    public ProgressStream(Stream inner, Action<long> progress)
+    public record FileUploadResponse(Guid Id, string Sha256Hash, long FileSize);
+    public class ProgressStream : Stream
     {
-        _inner = inner;
-        _progress = progress;
-    }
+        private readonly Stream _inner;
+        private readonly Action<long> _progress;
+
+        public ProgressStream(Stream inner, Action<long> progress)
+        {
+            _inner = inner;
+            _progress = progress;
+        }
 
     public override bool CanRead => _inner.CanRead;
     public override bool CanSeek => _inner.CanSeek;
@@ -155,10 +158,11 @@ public class ProgressStream : Stream
         return read;
     }
 
-    public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-    {
-        var read = await _inner.ReadAsync(buffer.AsMemory(offset, count), cancellationToken);
-        _progress(read);
-        return read;
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            var read = await _inner.ReadAsync(buffer.AsMemory(offset, count), cancellationToken);
+            _progress(read);
+            return read;
+        }
     }
 }

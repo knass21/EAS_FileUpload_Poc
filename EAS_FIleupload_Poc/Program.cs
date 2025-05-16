@@ -1,6 +1,6 @@
 using System.Net.Http.Headers;
 using EAS_FIleupload_Poc;
-using EAS_FIleupload_Poc.Data;
+using EAS_FIleupload_Poc.DataStorage;
 using EAS_FIleupload_Poc.FileStorage;
 using EAS_FIleupload_Poc.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -201,6 +201,9 @@ using (var scope = app.Services.CreateScope())
 
 app.Run();
 
-public record FileUploadResponse(Guid Id, string FileName, string Sha256Hash, long FileSize);
+namespace EAS_FIleupload_Poc
+{
+    public record FileUploadResponse(Guid Id, string FileName, string Sha256Hash, long FileSize);
 
-public record FileHashesResponse(string SHA256, string SHA1, string MD5);
+    public record FileHashesResponse(string SHA256, string SHA1, string MD5);
+}

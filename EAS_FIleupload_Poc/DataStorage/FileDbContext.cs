@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 
-namespace EAS_FIleupload_Poc.Data;
+namespace EAS_FIleupload_Poc.DataStorage;
 
 public class FileDbContext : DbContext
 {
