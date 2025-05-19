@@ -34,7 +34,7 @@ This repository demonstrates a complete file upload and download system using a 
 ## Quick Start
 
 ### Prerequisites
-- .NET 7 or newer
+- .NET 9
 - PostgreSQL (with large object support enabled)
 - `ffprobe` and `exiftool` available on the server (for metadata endpoints)
 
