@@ -57,7 +57,7 @@ This repository demonstrates a complete file upload and download system using a 
 - `POST /upload-swagger` – Upload via Swagger UI/form-data
 - `POST /upload-multi-swagger` – Upload multiple files via Swagger UI/form-data
 - `GET /files/{id}` – Download a file by GUID
-- `GET /files/{id}/hashes` – Get SHA256/SHA1/MD5 hashes
+- `GET /files/{id}/hashes` – Calculate and get SHA256/SHA1/MD5 hashes
 - `GET /files/{id}/metadata/ffprobe` – Extract video metadata
 - `GET /files/{id}/metadata/Exif` – Extract general metadata
 
