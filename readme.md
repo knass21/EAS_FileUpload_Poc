@@ -76,7 +76,7 @@ This repository demonstrates a complete file upload and download system using a 
 
 ## Requirements
 
-- .NET 7+
+- .NET 9
 - PostgreSQL (with large object support)
 - ffprobe and exiftool (for metadata endpoints)
 
