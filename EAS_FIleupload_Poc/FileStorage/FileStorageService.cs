@@ -32,8 +32,9 @@ public class FileStorageService
         var createCmd = new NpgsqlCommand("SELECT lo_create(0)", conn, (NpgsqlTransaction)tx);
         var oid = (uint)(await createCmd.ExecuteScalarAsync(cancellationToken))!;
 
-        var openCmd = new NpgsqlCommand("SELECT lo_open(@oid, 131072)", conn, (NpgsqlTransaction)tx);
+        var openCmd = new NpgsqlCommand("SELECT lo_open(@oid, @flags)", conn, (NpgsqlTransaction)tx);
         openCmd.Parameters.AddWithValue("oid", NpgsqlDbType.Oid, oid);
+        openCmd.Parameters.AddWithValue("flags", NpgsqlDbType.Integer, PgLargeObjectFlags.INV_WRITE);
         var fd = (int)(await openCmd.ExecuteScalarAsync(cancellationToken))!;
 
         var buffer = new byte[81920];
@@ -96,8 +97,9 @@ public class FileStorageService
             var createCmd = new NpgsqlCommand("SELECT lo_create(0)", conn, (NpgsqlTransaction)tx);
             var oid = (uint)(await createCmd.ExecuteScalarAsync(cancellationToken))!;
 
-            var openCmd = new NpgsqlCommand("SELECT lo_open(@oid, 131072)", conn, (NpgsqlTransaction)tx);
+            var openCmd = new NpgsqlCommand("SELECT lo_open(@oid, @flags)", conn, (NpgsqlTransaction)tx);
             openCmd.Parameters.AddWithValue("oid", NpgsqlDbType.Oid, oid);
+            openCmd.Parameters.AddWithValue("flags", NpgsqlDbType.Integer, PgLargeObjectFlags.INV_WRITE);
             var fd = (int)(await openCmd.ExecuteScalarAsync(cancellationToken))!;
 
             var buffer = new byte[81920];
@@ -163,8 +165,9 @@ public class FileStorageService
         await conn.OpenAsync(cancellationToken);
         var tx = await conn.BeginTransactionAsync(cancellationToken);
 
-        var openCmd = new NpgsqlCommand("SELECT lo_open(@oid, 262144)", conn, (NpgsqlTransaction)tx);
+        var openCmd = new NpgsqlCommand("SELECT lo_open(@oid, @flags)", conn, (NpgsqlTransaction)tx);
         openCmd.Parameters.AddWithValue("oid", NpgsqlDbType.Oid, file.LargeObjectOid);
+        openCmd.Parameters.AddWithValue("flags", NpgsqlDbType.Integer, PgLargeObjectFlags.INV_READ);
         var fd = (int)(await openCmd.ExecuteScalarAsync(cancellationToken))!;
 
         return new LargeObjectDbStream(conn, tx, fd);
@@ -174,4 +177,9 @@ public class FileStorageService
     {
         return Convert.ToHexStringLower(hash);
     }
+}
+public static class PgLargeObjectFlags
+{
+    public const int INV_WRITE = 0x20000; // 131072
+    public const int INV_READ  = 0x40000; // 262144
 }
