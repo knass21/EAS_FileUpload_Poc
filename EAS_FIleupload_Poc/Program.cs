@@ -40,7 +40,7 @@ app.UseAuthorization();
 app.UseExceptionHandler();
 
 // Upload endpoint
-app.MapPost("/upload", async (HttpRequest request, [FromServices] FileStorageService fileService,
+app.MapPost("/files", async (HttpRequest request, [FromServices] FileStorageService fileService,
         [FromQuery] string fileName, [FromQuery] string contentType, CancellationToken token) =>
     {
         var result = await fileService.UploadAsync(request.Body, fileName, contentType, token);
